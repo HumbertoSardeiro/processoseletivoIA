@@ -130,39 +130,155 @@ projetos/3-deteccao-mascaras/
 
 ## 📝 Relatório do Candidato
 
-👤 **Nome Completo:**
+👤 **Nome Completo:** Humberto Alexandre Santos Sardeiro
 
 ### 1️⃣ Resumo da Abordagem
 
-Descreva os hiperparâmetros de fine-tuning utilizados (épocas, tamanho de
-imagem, batch size) e quaisquer ajustes feitos para lidar com o desbalanceamento
-de classes, se houver.
+O projeto consistiu no *fine-tuning* do detector **YOLO11n** (variante *nano*,
+~2,58 milhões de parâmetros, 6,3 GFLOPs) a partir dos pesos pré-treinados
+`yolo11n.pt`. A variante *nano* foi escolhida por ser a mais leve da família
+YOLO11, adequada a treinamento em CPU e a implantação em dispositivos de borda,
+conforme exigido pelo desafio.
+
+Hiperparâmetros de fine-tuning utilizados:
+
+- **epochs = 20** (dentro da faixa sugerida de 15–30)
+- **imgsz = 640**
+- **batch = 16**
+- **device = "cpu"**
+- **patience = 10** (early stopping baseado na perda de validação)
+- **seed = 42** (reprodutibilidade)
+
+**Justificativa técnica (imgsz = 640):** nas imagens deste dataset é comum haver
+várias pessoas por foto, o que faz cada rosto ocupar uma região relativamente
+pequena da imagem. Manter a resolução de entrada em 640 preserva detalhe
+suficiente para o detector localizar rostos pequenos; reduzir esse valor
+diminuiria o *recall*, penalizando principalmente a classe minoritária. Além
+disso, 640 é o mesmo tamanho usado na inferência e na validação, evitando
+divergência entre treino e uso do modelo.
+
+**Justificativa técnica (epochs = 20 + patience = 10):** o fine-tuning de um
+modelo já pré-treinado converge rápido; 20 épocas foram suficientes para
+estabilizar as métricas de validação (treino completo em ~43 min em CPU), e o
+early stopping (`patience=10`) interromperia o treino caso a perda de validação
+parasse de melhorar, protegendo contra overfitting.
+
+Quanto ao **desbalanceamento de classes**, não foi aplicada reponderação
+explícita; foram utilizados os pesos `best.pt` (melhor época segundo a métrica
+de validação). O efeito do desbalanceamento é discutido na seção 5.
 
 ### 2️⃣ Bibliotecas Utilizadas
 
-Liste as principais bibliotecas utilizadas, preferencialmente com suas versões.
+Treinamento (local, Windows, Python 3.11.9):
+
+- **ultralytics 8.4.101**
+- **torch 2.13.0** (CPU)
+- **numpy 2.4.6**
+- **opencv-python 5.0.0.93**
+- **matplotlib 3.11.1**
+
+Exportação para o formato de borda (executada em ambiente Linux — ver seção 5):
+
+- **litert-torch 0.9.1**
+- **ai-edge-litert 2.1.5**
 
 ### 3️⃣ Técnica de Otimização do Modelo
 
-Explique o processo de exportação para TFLite realizado em `optimize_model.py`.
+O modelo treinado (`model.pt`) foi exportado para o formato **LiteRT** — a nova
+geração (e novo nome) do TensorFlow Lite — gerando o arquivo `model.tflite`. A
+exportação foi feita com `model.export(format="tflite")`, que na versão atual da
+Ultralytics é automaticamente redirecionada para o formato LiteRT. O `.tflite`
+resultante é um artefato otimizado para execução *on-device* (mobile, embarcado,
+edge), com um runtime enxuto adequado a hardware com restrição de recursos.
+
+Além da exportação padrão (float32), também foi avaliada a **quantização
+estática INT8** como técnica de compressão adicional — os resultados e as
+limitações dessa avaliação estão descritos na seção 5.
 
 ### 4️⃣ Resultados Obtidos
 
-Informe o mAP50 (e, se possível, o mAP50-95) obtido na validação, por classe se
-possível, e o tamanho dos arquivos `model.pt` e `model.tflite`.
+Métricas do modelo treinado (`model.pt`) no conjunto de **validação** (170
+imagens, 726 instâncias):
+
+- **mAP50 (geral): 0,749**
+- **mAP50-95 (geral): 0,528**
+
+Desempenho por classe (mAP50):
+
+| Classe                  | Instâncias | Precisão | Recall | mAP50 | mAP50-95 |
+|-------------------------|-----------:|---------:|-------:|------:|---------:|
+| with_mask               | 593        | 0,917    | 0,943  | 0,966 | 0,684    |
+| without_mask            | 114        | 0,789    | 0,719  | 0,785 | 0,516    |
+| mask_weared_incorrect   | 19         | 0,692    | 0,473  | 0,496 | 0,383    |
+
+Tamanho dos arquivos gerados (artefato entregue — exportação float32):
+
+- **model.pt:** ~5,2 MB (5.455.834 bytes)
+- **model.tflite:** ~10,1 MB (exportação LiteRT em float32)
+
+Ambos os artefatos ficaram acima dos mínimos de aprovação (mAP50 ≥ 0,30 para o
+`model.pt` e ≥ 0,20 para o `model.tflite`). A comparação de tamanho com a
+alternativa quantizada (INT8) é discutida na seção 5.
 
 ### 5️⃣ Comentários Adicionais (Opcional)
 
-Dificuldades encontradas, decisões técnicas importantes, limitações do modelo
-(ex: desempenho na classe minoritária), aprendizados durante o desafio.
+**Avaliação da quantização INT8 (experimento).** Além da exportação padrão
+(float32), foi testada a **quantização estática INT8** via
+`model.export(format="tflite", int8=True, data="dataset/data.yaml")`, usando as
+imagens de validação como conjunto de calibração. O ganho de tamanho foi
+expressivo: o modelo INT8 ficou com **~2,9 MB**, contra ~5,2 MB do `model.pt` e
+~10,1 MB do `.tflite` float32 — uma redução de **~3,5x** em relação ao float32,
+tornando-o **menor que o próprio modelo original**. A precisão caiu de forma
+controlada: mAP50 de 0,638 no modelo INT8, ainda muito acima do mínimo exigido.
+
+**Por que o artefato entregue é o float32.** Apesar do INT8 ser mais leve, optei
+por entregar a versão float32 por robustez de ambiente. A exportação INT8 exige
+a instalação automática do pacote `litert-torch` no momento da conversão, e essa
+instalação substitui a versão do PyTorch (de 2.13.0 para 2.12.1), gerando um
+conflito de dependências (`torchvision` exige `torch==2.13.0`) que quebra a
+conversão no ambiente de CI com o erro
+`ImportError: cannot import name 'get_cuda_generator_meta_val'`. A exportação
+float32 não depende dessa auto-instalação e é reproduzível de forma estável.
+Trata-se de um trade-off consciente entre **tamanho** (favorável ao INT8) e
+**reprodutibilidade** (favorável ao float32).
+
+**Dificuldade encontrada — exportação no Windows.** A partir da Ultralytics
+8.4.83 a exportação TFLite passou a usar o LiteRT, cuja conversão só é suportada
+em Linux x86_64 e macOS. No Windows a exportação falha
+(`AssertionError: LiteRT export only supported on Linux x86 and macOS`). Como o
+treinamento (PyTorch) funciona no Windows, contornei gerando o `model.tflite` em
+ambiente Linux (Google Colab), a partir do mesmo `model.pt` treinado localmente.
+
+**Limitação do modelo — classe minoritária.** O desempenho na classe
+`mask_weared_incorrect` foi inferior ao das demais, refletindo o forte
+desbalanceamento do dataset (apenas 19 instâncias na validação, contra 593 de
+`with_mask`). Oversampling, augmentation direcionada ou pesos de classe poderiam
+melhorar esse resultado.
 
 ### 6️⃣ Exemplo de Inferência
 
-Cole a saída do terminal ao rodar `run_inference.py` (número de detecções por
-imagem), e comente brevemente sobre o que observou ao abrir as imagens
-anotadas em `runs/detect/inferencia_exemplos/predicoes/` — por exemplo, se as
-caixas ficaram bem localizadas, se houve confusão entre classes, ou se a
-classe minoritária (`mask_weared_incorrect`) teve desempenho visivelmente pior.
+Saída do `run_inference.py` carregando o `model.tflite` (artefato de borda) e
+rodando em 5 imagens do conjunto de validação, uma de cada vez:
+
+```
+Imagem                               Detecções  Detalhes
+----------------------------------------------------------------------
+maksssksksss105.jpg                         10  [10x with_mask]
+maksssksksss107.jpg                          1  [1x with_mask]
+maksssksksss11.jpg                          25  [23x with_mask, 1x mask_weared_incorrect, 1x without_mask]
+maksssksksss113.jpg                          4  [3x with_mask, 1x without_mask]
+maksssksksss12.jpg                          15  [13x with_mask, 2x without_mask]
+----------------------------------------------------------------------
+TOTAL                                       55
+```
+
+Comentário: ao abrir as imagens anotadas, as caixas apareceram bem posicionadas
+sobre os rostos, inclusive na foto de multidão (`maksssksksss11.jpg`), com 25
+detecções simultâneas. A grande maioria das detecções foi da classe `with_mask`,
+coerente com o desempenho por classe na validação (mAP50 0,966 para `with_mask`).
+A classe `mask_weared_incorrect` aparece raramente (1 detecção entre 55),
+refletindo o forte desbalanceamento do dataset e a maior dificuldade do modelo
+com essa categoria.
 
 ---
 
