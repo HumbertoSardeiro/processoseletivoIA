@@ -1,191 +1,285 @@
-# Processo Seletivo – Intensivo Maker | AI
+# Projeto 3 — Detecção de Máscaras Faciais (YOLO)
 
-Bem-vindo(a) à **etapa prática do processo seletivo para o Intensivo Maker**.
+## 💻 O Desafio Técnico
 
-Esta atividade tem como objetivo avaliar competências técnicas relacionadas a **Machine Learning**, **Visão Computacional** e **Otimização de modelos para sistemas embarcados (Edge AI)**, a partir da aplicação prática dos conhecimentos adquiridos nos cursos EAD da etapa anterior.
+Desenvolva um modelo de **detecção de objetos** capaz de identificar, em uma
+imagem com rostos, se cada pessoa está **usando máscara corretamente**, **sem
+máscara**, ou **usando a máscara de forma incorreta** — localizando cada rosto
+com uma bounding box.
 
-> 🎯 **Importante**
-> O foco deste desafio é avaliar sua capacidade de **projetar, treinar e otimizar um modelo de IA** — e de **entregar corretamente** os artefatos gerados.
+Diferente dos Projetos 1 e 2 (onde você constrói uma CNN do zero), aqui o
+objetivo é **adaptar e otimizar um framework de detecção real para Edge AI** —
+uma competência bastante prática no dia a dia de Visão Computacional Embarcada,
+já que a imensa maioria das aplicações de detecção em produção parte de um
+modelo pré-treinado, não de uma arquitetura construída do zero.
 
----
+> ⚠️ **Exceção importante:** ao contrário dos Projetos 1 e 2, aqui o uso de
+> **pesos pré-treinados é permitido e esperado** (fine-tuning). Isso é
+> intencional — este projeto avalia uma competência diferente: adaptar,
+> treinar e exportar um framework de detecção real para o seu dataset.
 
-## 📌 Navegação Rápida
+O foco não é apenas obter alta acurácia, mas **compreender o fluxo completo**:
 
-- 🏁 [Passo 0 – Antes de Tudo](#-passo-0-antes-de-tudo)
-- ⚙ [Passo 1 – Preparando o Ambiente](#-passo-1-preparando-o-ambiente)
-- 🧭 [Passo 2 – Escolha do Projeto](#-passo-2-escolha-do-projeto)
-- 📤 [Passo 3 – Instruções de Entrega](#-passo-3-instruções-de-entrega)
-- ⚠️ [Restrições Gerais de Engenharia](#️-restrições-gerais-de-engenharia)
-- 🆘 [Suporte](#-suporte)
+**fine-tuning → validação → exportação → otimização para edge**
 
----
+## 🎯 Conjunto de Dados
 
-## 🏁 Passo 0: Antes de Tudo
+Este projeto já vem com um dataset **pronto para uso**, na pasta [`dataset/`](dataset/):
+o **Face Mask Detection Dataset** ([Kaggle, andrewmvd](https://www.kaggle.com/datasets/andrewmvd/face-mask-detection),
+licença **CC0 1.0** — domínio público), já convertido do formato original (Pascal VOC)
+para o formato esperado pelo Ultralytics YOLO.
 
-Caso você **nunca tenha utilizado Git ou GitHub**, não se preocupe. Siga atentamente as etapas abaixo.
+- **853 imagens** de rostos, com bounding boxes anotadas
+- **3 classes:** `with_mask`, `without_mask`, `mask_weared_incorrect`
+- Já dividido em treino (~80%) e validação (~20%)
+- ⚠️ O dataset é **desbalanceado** — a classe `mask_weared_incorrect` tem
+  significativamente menos exemplos que as outras duas. Isso é uma
+  característica real de datasets de detecção e não é um bug — comente esse
+  ponto no seu relatório se perceber o modelo com dificuldade nessa classe.
 
-### 1️⃣ Criação de Conta no GitHub
+Você **não precisa** baixar nada do Kaggle nem escrever código de conversão de
+anotações — isso já está pronto em `dataset/`. Seu trabalho começa direto no
+fine-tuning do modelo.
 
-1. Acesse: https://github.com
-2. Clique em **Sign up**
-3. Crie sua conta gratuita seguindo as instruções da plataforma
+## ✅ Requisitos Obrigatórios
 
-(*O GitHub será utilizado para envio, versionamento e correção automática do seu projeto.*)
+### Etapa 1 — Fine-tuning do Modelo (`train_model.py`)
 
-### 2️⃣ Instalação do Git
+Implemente, usando a biblioteca **Ultralytics** (YOLO):
 
-O **Git** é a ferramenta que permite versionar e enviar seu código para o GitHub.
+- Carregamento do modelo pré-treinado **YOLO11n** (`YOLO("yolo11n.pt")`) —
+  esta é a única exceção à regra de "sem modelos pré-treinados" do processo
+  seletivo, válida especificamente para este projeto
+- Fine-tuning no dataset fornecido (`dataset/data.yaml`), em **CPU**, com um
+  número de épocas modesto (ex: 15-30 — YOLO converge relativamente rápido
+  em fine-tuning, mesmo em CPU)
+- Ao final do treino, copie os pesos resultantes (`runs/detect/train/weights/best.pt`)
+  para a raiz desta pasta, com o nome **`model.pt`**
 
-- **Windows** — Baixe e instale o **Git Bash**: https://git-scm.com/downloads
-- **Linux / macOS** — Verifique se o Git já está instalado:
-  ```bash
-  git --version
-  ```
+### Etapa 2 — Otimização do Modelo (`optimize_model.py`)
 
----
+Implemente:
 
-## ⚙ Passo 1: Preparando o Ambiente
+- Carregamento do `model.pt` treinado
+- Exportação para **TensorFlow Lite** via `model.export(format="tflite")`
+  (a Ultralytics gera automaticamente um arquivo `model.tflite` na mesma pasta)
 
-Para desenvolver o desafio, você deverá criar uma cópia deste repositório.
+> 💡 Na primeira execução, a Ultralytics pode instalar automaticamente
+> dependências extras necessárias para a exportação (isso é esperado e pode
+> levar alguns minutos).
 
-### 1️⃣ Fork do Repositório
+### Etapa 3 — Inferência com o Modelo Otimizado (`run_inference.py`)
 
-No canto superior direito desta página, clique em **Fork**. Uma cópia deste repositório será criada no **seu perfil do GitHub**.
-(*O Fork permite que você trabalhe de forma independente sem alterar o repositório original.*)
+Implemente:
 
-### 2️⃣ Clone do Repositório
+- Carregamento especificamente do **`model.tflite`** (o artefato de edge — não
+  o `model.pt`) usando `YOLO("model.tflite", task="detect")`
+- Execução de inferência em pelo menos **5 imagens** de `dataset/images/val/`,
+  **uma de cada vez** — o `model.tflite` exportado aceita apenas 1 imagem por
+  chamada (batch=1), que é aliás o cenário real de uso em edge
+- Exibição no terminal, para cada imagem, do número de detecções encontradas
 
-No repositório do **seu Fork**, clique em **<> Code**, copie a URL e execute:
+> 💡 O Ultralytics salva automaticamente as imagens anotadas com as caixas
+> preditas em `runs/detect/...` (pasta já ignorada pelo `.gitignore` — não
+> precisa, nem deve, ser commitada). Abra essas imagens localmente pra conferir
+> visualmente as predições antes de escrever o relatório.
+>
+> 💡 Essa etapa existe porque uma métrica agregada (mAP) pode esconder
+> problemas que só aparecem olhando exemplos individuais — especialmente dado
+> o desbalanceamento de classes deste dataset.
 
-```bash
-git clone https://github.com/SEU_USUARIO/nome-do-repositorio.git
-cd nome-do-repositorio
+## 📂 Estrutura da Pasta
+
+⚠️ Não altere os nomes dos arquivos nem a estrutura de `dataset/`.
+
+```
+projetos/3-deteccao-mascaras/
+├── train_model.py         # ✏️ Fine-tuning do modelo
+├── optimize_model.py      # ✏️ Exportação e otimização
+├── run_inference.py       # ✏️ Inferência de exemplo com o modelo otimizado
+├── requirements.txt       # 📄 Dependências do projeto
+├── model.pt               # 🤖 Gerado por você — deve ser commitado
+├── model.tflite            # ⚡ Gerado por você — deve ser commitado
+├── README.md               # 📝 Este arquivo (também usado como relatório)
+└── dataset/                # 📦 Dataset já pronto (não modificar)
+    ├── data.yaml
+    ├── images/{train,val}/
+    └── labels/{train,val}/
 ```
 
-### 3️⃣ Preparação do Ambiente de Execução
+## ⚠️ Restrições e Considerações de Engenharia
 
-Você pode executar o projeto de **três formas**. Escolha apenas uma.
+- Modelo base: **YOLO11n** (variante *nano*, indicada para CPU/edge) — não use
+  variantes maiores (s/m/l/x)
+- Treinamento apenas em CPU
+- Fine-tuning é permitido e esperado (única exceção às regras gerais do processo seletivo)
+- **Não é esperada detecção perfeita**, especialmente na classe minoritária
+  (`mask_weared_incorrect`) — o objetivo é demonstrar que o pipeline completo
+  (fine-tuning → validação → exportação) funciona corretamente
+- O tempo de treinamento e exportação deste projeto tende a ser **maior** que
+  o dos Projetos 1 e 2 — reserve tempo extra para rodar localmente antes de enviar
 
-#### Opção A – Ambiente Python Local
-Requisitos: Python **3.10 ou 3.11** e pip.
+## ⚖️ Critérios de Avaliação
 
-As dependências ficam dentro da pasta do projeto escolhido (veja Passo 2), então instale-as **depois** de escolher seu projeto:
+- **Funcionalidade** — execução correta dos scripts e geração de `model.pt` e `model.tflite`
+- **Qualidade do modelo** — mAP50 no conjunto de validação acima do mínimo esperado
+- **Edge AI** — exportação correta para `.tflite`
+- **Documentação** — preenchimento adequado do relatório abaixo
 
-```bash
-cd projetos/<pasta-do-projeto-escolhido>
-pip install -r requirements.txt
+---
+
+## 📝 Relatório do Candidato
+
+👤 **Nome Completo:** Humberto Alexandre Santos Sardeiro
+
+### 1️⃣ Resumo da Abordagem
+
+O projeto consistiu no *fine-tuning* do detector **YOLO11n** (variante *nano*,
+~2,58 milhões de parâmetros, 6,3 GFLOPs) a partir dos pesos pré-treinados
+`yolo11n.pt`. A variante *nano* foi escolhida por ser a mais leve da família
+YOLO11, adequada a treinamento em CPU e a implantação em dispositivos de borda,
+conforme exigido pelo desafio.
+
+Hiperparâmetros de fine-tuning utilizados:
+
+- **epochs = 20** (dentro da faixa sugerida de 15–30)
+- **imgsz = 640**
+- **batch = 16**
+- **device = "cpu"**
+- **patience = 10** (early stopping baseado na perda de validação)
+- **seed = 42** (reprodutibilidade)
+
+**Justificativa técnica (imgsz = 640):** nas imagens deste dataset é comum haver
+várias pessoas por foto, o que faz cada rosto ocupar uma região relativamente
+pequena da imagem. Manter a resolução de entrada em 640 preserva detalhe
+suficiente para o detector localizar rostos pequenos; reduzir esse valor
+diminuiria o *recall*, penalizando principalmente a classe minoritária. Além
+disso, 640 é o mesmo tamanho usado na inferência e na validação, evitando
+divergência entre treino e uso do modelo.
+
+**Justificativa técnica (epochs = 20 + patience = 10):** o fine-tuning de um
+modelo já pré-treinado converge rápido; 20 épocas foram suficientes para
+estabilizar as métricas de validação (treino completo em ~43 min em CPU), e o
+early stopping (`patience=10`) interromperia o treino caso a perda de validação
+parasse de melhorar, protegendo contra overfitting.
+
+Quanto ao **desbalanceamento de classes**, não foi aplicada reponderação
+explícita; foram utilizados os pesos `best.pt` (melhor época segundo a métrica
+de validação). O efeito do desbalanceamento é discutido na seção 5.
+
+### 2️⃣ Bibliotecas Utilizadas
+
+Treinamento (local, Windows, Python 3.11.9):
+
+- **ultralytics 8.4.101**
+- **torch 2.13.0** (CPU)
+- **numpy 2.4.6**
+- **opencv-python 5.0.0.93**
+- **matplotlib 3.11.1**
+
+Exportação/quantização para o formato de borda (executada em ambiente Linux —
+ver seção 5):
+
+- **litert-torch 0.9.1**
+- **ai-edge-litert 2.1.5**
+
+### 3️⃣ Técnica de Otimização do Modelo
+
+O modelo treinado (`model.pt`) foi exportado para o formato **LiteRT** — a nova
+geração (e novo nome) do TensorFlow Lite — gerando o arquivo `model.tflite`. A
+exportação foi feita com
+`model.export(format="tflite", int8=True, data="dataset/data.yaml")`, que na
+versão atual da Ultralytics é redirecionada para o formato LiteRT.
+
+A técnica de otimização aplicada foi a **quantização estática INT8** (pesos e
+ativações em inteiro de 8 bits). Diferente da exportação padrão em float32, a
+quantização INT8 requer um conjunto de calibração — fornecido aqui via
+`data.yaml` (imagens de validação) — para medir as faixas de valores e comprimir
+o modelo preservando o máximo de precisão. O resultado é um `.tflite` bem mais
+leve, adequado à execução *on-device* em hardware com restrição de memória e
+energia.
+
+### 4️⃣ Resultados Obtidos
+
+Métricas do modelo treinado (`model.pt`) no conjunto de **validação** (170
+imagens, 726 instâncias):
+
+- **mAP50 (geral): 0,749**
+- **mAP50-95 (geral): 0,528**
+
+Desempenho por classe (mAP50):
+
+| Classe                  | Instâncias | Precisão | Recall | mAP50 | mAP50-95 |
+|-------------------------|-----------:|---------:|-------:|------:|---------:|
+| with_mask               | 593        | 0,917    | 0,943  | 0,966 | 0,684    |
+| without_mask            | 114        | 0,789    | 0,719  | 0,785 | 0,516    |
+| mask_weared_incorrect   | 19         | 0,692    | 0,473  | 0,496 | 0,383    |
+
+**Comparação de tamanho (otimização):**
+
+| Artefato                     | Tamanho    |
+|------------------------------|-----------:|
+| model.pt (PyTorch)           | ~5,2 MB    |
+| model.tflite (INT8, borda)   | ~2,9 MB    |
+
+A quantização INT8 gerou um artefato de borda **menor que o modelo original**:
+o `model.tflite` (2,9 MB) é cerca de **1,8x menor** que o `model.pt` (5,2 MB),
+uma redução de ~44%. Como referência, em relação a uma exportação sem
+quantização (float32, ~10,1 MB), a quantização INT8 reduz o modelo em ~3,5x.
+Ambos os artefatos ficaram acima dos mínimos de aprovação (mAP50 ≥ 0,30 para o
+`model.pt` e ≥ 0,20 para o `model.tflite`; o `.tflite` INT8 mediu mAP50 0,638 na
+validação).
+
+### 5️⃣ Comentários Adicionais (Opcional)
+
+**Trade-off da quantização.** A quantização INT8 reduziu o modelo de 5,2 MB para
+2,9 MB, mas com custo de precisão: o mAP50 medido sobre o `model.tflite` INT8
+ficou em 0,638, contra 0,749 do modelo em precisão total — uma queda de ~15%.
+Como o desafio prioriza a otimização para borda e a métrica permanece muito
+acima do mínimo exigido, o ganho de tamanho compensou. Vale notar ainda que a
+calibração usou 170 imagens, abaixo das 300 recomendadas pelo LiteRT, o que pode
+ter ampliado um pouco a perda de precisão.
+
+**Dificuldade encontrada — exportação no Windows.** A partir da Ultralytics
+8.4.83 a exportação TFLite passou a usar o LiteRT, cuja conversão só é suportada
+em Linux x86_64 e macOS. No Windows a exportação falha
+(`AssertionError: LiteRT export only supported on Linux x86 and macOS`). Como o
+treinamento (PyTorch) funciona no Windows, contornei gerando o `model.tflite` em
+ambiente Linux (Google Colab), a partir do mesmo `model.pt` treinado localmente.
+
+**Limitação do modelo — classe minoritária.** O desempenho na classe
+`mask_weared_incorrect` foi inferior ao das demais, refletindo o forte
+desbalanceamento do dataset (apenas 19 instâncias na validação, contra 593 de
+`with_mask`). Oversampling, augmentation direcionada ou pesos de classe poderiam
+melhorar esse resultado.
+
+### 6️⃣ Exemplo de Inferência
+
+Saída do `run_inference.py` carregando o `model.tflite` (INT8, artefato de borda)
+e rodando em 5 imagens do conjunto de validação, uma de cada vez:
+
+```
+Imagem                               Detecções  Detalhes
+----------------------------------------------------------------------
+maksssksksss105.jpg                         14  [14x with_mask]
+maksssksksss107.jpg                          1  [1x with_mask]
+maksssksksss11.jpg                          42  [39x with_mask, 1x mask_weared_incorrect, 2x without_mask]
+maksssksksss113.jpg                          8  [8x with_mask]
+maksssksksss12.jpg                          24  [20x with_mask, 4x without_mask]
+----------------------------------------------------------------------
+TOTAL                                       89
 ```
 
-#### Opção B – Dev Container
-Este repositório inclui um **Dev Container** para facilitar a criação de um ambiente Python padronizado.
-
-**Requisitos:** VS Code, Docker instalado, extensão **Dev Containers**.
-
-**Passos:** abra o repositório no VS Code → **"Reopen in Container"** → aguarde a criação automática do ambiente.
-
-#### Opção C – via browser (GitHub Codespaces)
-1. Clique em **<> Code**
-2. Clique em **Codespaces**
-3. Clique em **Create codespace on main**
-
-> Será aberta uma instância do VS Code no seu navegador com o container configurado.
+Comentário: ao abrir as imagens anotadas, as caixas apareceram bem posicionadas
+sobre os rostos, inclusive na foto de multidão (`maksssksksss11.jpg`), com 42
+detecções simultâneas. A grande maioria das detecções foi da classe `with_mask`,
+coerente com o desempenho por classe na validação (mAP50 0,966 para `with_mask`).
+A classe `mask_weared_incorrect` aparece raramente (1 detecção entre 89),
+refletindo o forte desbalanceamento do dataset e a maior dificuldade do modelo
+com essa categoria, efeito acentuado pela quantização INT8.
 
 ---
 
-## 🧭 Passo 2: Escolha do Projeto
+## 📄 Créditos do Dataset
 
-Este desafio oferece **três opções de projeto**, todas em Visão Computacional e com **níveis de dificuldade equivalentes**. Você deve escolher **apenas uma**.
-
-| # | Projeto | Tarefa | Dataset |
-|---|---------|--------|---------|
-| 1 | [Classificação MNIST](projetos/1-classificacao-mnist/README.md) | Classificação de dígitos manuscritos (0-9) | `tf.keras.datasets.mnist` |
-| 2 | [Classificação CIFAR-10](projetos/2-classificacao-cifar/README.md) | Classificação de imagens coloridas (10 categorias de objetos/animais) | `tf.keras.datasets.cifar10` |
-| 3 | [Detecção de Máscaras Faciais](projetos/3-deteccao-mascaras/README.md) | Detecção de objetos: localizar rostos e classificar uso de máscara (fine-tuning de YOLO) | Face Mask Detection (Kaggle, CC0) — já incluso no repositório |
-
-Clique no link do projeto escolhido para ver as instruções técnicas completas e o template do relatório.
-
-### ⚠️ Depois de escolher, você DEVE:
-
-1. Trabalhar **apenas** dentro da pasta do projeto escolhido (`projetos/N-nome-do-projeto/`).
-2. **Apagar as pastas dos outros dois projetos** dentro de `projetos/` antes do commit final.
-3. Manter os nomes de arquivos e a estrutura interna da pasta do projeto **sem alterações**.
-
-> 🤖 **Por quê apagar as outras pastas?**
-> A correção automática (GitHub Actions) identifica qual projeto você escolheu verificando qual pasta restou dentro de `projetos/`. Se mais de uma pasta permanecer (ou nenhuma), a validação falha automaticamente com uma mensagem explicando o problema.
-
----
-
-## 📤 Passo 3: Instruções de Entrega
-
-### ✔️ Antes de enviar
-
-Dentro da pasta do seu projeto, execute os scripts e confirme que os arquivos foram gerados:
-
-```bash
-cd projetos/<pasta-do-projeto-escolhido>
-python train_model.py       # deve gerar model.h5 (Projetos 1 e 2) ou model.pt (Projeto 3)
-python optimize_model.py    # deve gerar model.tflite
-```
-
-> ⚠️ **Importante:** a correção automática **não treina nada por você**. Ela valida os artefatos que **você gerou localmente e enviou (commitou) para o repositório**. Se esses arquivos não estiverem no seu commit, a validação falha.
-
-### ⬆️ Envio do Código
-
-```bash
-git add .
-git commit -m "Entrega do desafio técnico - Seu Nome"
-git push origin main
-```
-
-### 🔍 Verificação Automática
-
-1. Acesse a aba **Actions** no GitHub do seu Fork
-2. Verifique se o workflow foi executado com sucesso (✅)
-3. Em caso de erro (❌), consulte os logs, corrija e envie novamente
-
-### 📎 Submissão Final
-
-Copie o link do seu repositório e envie conforme orientações do processo seletivo no Moodle.
-
----
-
-## ⚠️ Restrições Gerais de Engenharia
-
-Válidas para os três projetos (detalhes específicos estão no README de cada um):
-
-- Treinamento apenas em **CPU**
-- Sem uso de modelos pré-treinados — **exceto no Projeto 3**, onde o fine-tuning
-  de um modelo pré-treinado (YOLO11n) é intencional e faz parte do desafio
-- Número de épocas limitado (compatível com execução rápida — exceto o Projeto 3,
-  que naturalmente leva mais tempo por envolver fine-tuning de um detector)
-- Código deve executar do início ao fim **sem intervenção manual**
-- Os artefatos do modelo treinado e do modelo otimizado (`model.h5`/`model.pt` e
-  `model.tflite`, dependendo do projeto) **devem ser gerados localmente e
-  enviados (commitados) junto com o código** — a correção automática apenas os
-  valida, não os gera
-
-> **Importante:** o objetivo não é obter a maior acurácia possível, mas sim demonstrar **engenharia eficiente** e a capacidade de entregar um pipeline completo e reprodutível.
-
----
-
-## 📚 Material de Apoio
-
-Os cursos realizados na etapa anterior **devem ser utilizados como referência**:
-
-- 📘 Fundamentos de Inteligência Artificial para Sistemas Embarcados
-- 👁️ Sistemas de Visão Computacional Embarcada
-- ⚙️ Otimização de Modelos em Sistemas Embarcados
-
----
-
-## 🆘 Suporte
-
-Em caso de dúvidas:
-
-- Consulte o material dos cursos EAD
-- Leia atentamente este README e o README do projeto escolhido
-- Analise os logs das GitHub Actions
-- Utilize os canais oficiais para contato com os instrutores
-
-Boa sorte no processo seletivo.
-****
+Face Mask Detection Dataset — [Kaggle: andrewmvd/face-mask-detection](https://www.kaggle.com/datasets/andrewmvd/face-mask-detection), licença CC0 1.0 (domínio público).
