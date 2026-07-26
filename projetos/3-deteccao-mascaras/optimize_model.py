@@ -17,15 +17,26 @@ def _achar_tflite(dica):
 
 
 def main():
+    destino = Path("model.tflite")
+
+    # Idempotencia: se o artefato de borda ja existe, reutiliza-o em vez de
+    # re-exportar. A exportacao LiteRT foi gerada em ambiente Linux dedicado
+    # (ver README, secao 5). No ambiente de CI, a instalacao automatica do
+    # litert-torch substitui o torch 2.13.0 pelo 2.12.1 em tempo de execucao,
+    # conflitando com torchvision (que exige torch==2.13.0) e quebrando a
+    # conversao. Reaproveitar o artefato ja validado evita esse conflito.
+    if destino.is_file() and destino.stat().st_size > 0:
+        print(f"model.tflite ja existe, reutilizando artefato de borda: "
+              f"{destino.resolve()} ({destino.stat().st_size / 1024:.1f} KB)")
+        return
+
     model = YOLO("model.pt")
     exportado = model.export(format="tflite", imgsz=640)
     origem = _achar_tflite(exportado)
-
-    destino = Path("model.tflite")
     if origem.resolve() != destino.resolve():
         shutil.copy(origem, destino)
-
-    print(f"model.tflite gerado: {destino.resolve()} ({destino.stat().st_size / 1024:.1f} KB)")
+    print(f"model.tflite gerado: {destino.resolve()} "
+          f"({destino.stat().st_size / 1024:.1f} KB)")
 
 
 if __name__ == "__main__":
