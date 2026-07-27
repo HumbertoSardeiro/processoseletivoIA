@@ -92,11 +92,13 @@ Desempenho por classe (mAP50):
 | model.pt (PyTorch)           | ~5,2 MB    |
 | model.tflite (INT8, borda)   | ~2,9 MB    |
 
-A quantização INT8 reduziu o modelo em ~3,5x (de 5,2 MB para 2,9 MB), deixando o
-artefato de borda **menor que o modelo original** — objetivo central da etapa de
-otimização. Ambos os artefatos ficaram acima dos mínimos de aprovação
-(mAP50 ≥ 0,30 para o `model.pt` e ≥ 0,20 para o `model.tflite`; o `.tflite` INT8
-mediu mAP50 0,638 na validação).
+A quantização INT8 gerou um artefato de borda **menor que o modelo original**:
+o `model.tflite` (2,9 MB) é cerca de **1,8x menor** que o `model.pt` (5,2 MB),
+uma redução de ~44%. Como referência, em relação a uma exportação sem
+quantização (float32, ~10,1 MB), a quantização INT8 reduz o modelo em ~3,5x.
+Ambos os artefatos ficaram acima dos mínimos de aprovação (mAP50 ≥ 0,30 para o
+`model.pt` e ≥ 0,20 para o `model.tflite`; o `.tflite` INT8 mediu mAP50 0,638 na
+validação).
 
 ### 5️⃣ Comentários Adicionais (Opcional)
 
